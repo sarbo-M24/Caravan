@@ -49,6 +49,18 @@ public class CaravanBarterSystem : MonoBehaviour
     [SerializeField] private TextMeshProUGUI dialogueText;
     [SerializeField] private TextMeshProUGUI tradeDisplayText;
 
+    [Header("Caravan Visuals")]
+    [SerializeField] private CaravanVisuals caravanVisuals;
+
+    [Header("Trade UI")]
+    [SerializeField] private TradeUIManager tradeUIManager;
+
+    [Header("Irritation Meter")]
+    [SerializeField] private IrritationMeter irritationMeter;
+
+
+
+
     private DialogueSet currentDialogue;
 
 
@@ -69,10 +81,10 @@ public class CaravanBarterSystem : MonoBehaviour
     {
         if (resources.Count == 0)
         {
-            resources.Add(new Resource { resourceName = "A", amount = 30 });
-            resources.Add(new Resource { resourceName = "B", amount = 30 });
-            resources.Add(new Resource { resourceName = "C", amount = 30 });
-            resources.Add(new Resource { resourceName = "D", amount = 30 });
+            resources.Add(new Resource { resourceName = "Pepper", amount = 30 });
+            resources.Add(new Resource { resourceName = "Cinnamon", amount = 30 });
+            resources.Add(new Resource { resourceName = "Turmeric", amount = 30 });
+            resources.Add(new Resource { resourceName = "Chilli", amount = 30 });
         }
     }
 
@@ -149,10 +161,25 @@ public class CaravanBarterSystem : MonoBehaviour
         hasAdjustedSlider = false;
         caravanPanel.SetActive(true);
 
-        // Get random dialogue for this caravan
+        if (caravanVisuals != null)
+        {
+            caravanVisuals.ShowCaravan();
+        }
+
+        // Show irritation meter
+        if (irritationMeter != null)
+        {
+            irritationMeter.ShowMeter();
+        }
+
+        // Update trade UI to show active resources
+        if (tradeUIManager != null)
+        {
+            tradeUIManager.UpdateTradeDisplayAnimated(currentTrade.resourceRequested, currentTrade.resourceOffered);
+        }
+
         currentDialogue = CaravanDialogue.GetRandomDialogue(currentTrade.tradeType);
 
-        // Display arrival dialogue
         string arrivalMessage = CaravanDialogue.FormatDialogue(
             currentDialogue.arrival,
             currentTrade.resourceOffered,
@@ -160,7 +187,6 @@ public class CaravanBarterSystem : MonoBehaviour
         );
         dialogueText.text = arrivalMessage;
 
-        // Display trade info
         UpdateTradeDisplay();
         UpdateRejectionCounter();
 
@@ -171,6 +197,7 @@ public class CaravanBarterSystem : MonoBehaviour
         currentPlayerOffer = currentTrade.amountRequested;
         UpdateSliderDisplay();
         UpdateButtonText();
+        UpdateCaravanEmotion();
 
         feedbackText.text = "Drag slider to make a counter-offer, or accept their current offer!";
 
@@ -180,6 +207,8 @@ public class CaravanBarterSystem : MonoBehaviour
 
         Debug.Log($"Caravan displayed - Offering: {currentTrade.amountOffered} {currentTrade.resourceOffered}, Requesting: {currentTrade.amountRequested} {currentTrade.resourceRequested}");
     }
+
+
 
 
 
@@ -194,7 +223,14 @@ public class CaravanBarterSystem : MonoBehaviour
     {
         int remaining = currentTrade.maxRejections - currentTrade.rejectionCount;
         rejectionCounterText.text = $"Patience: {remaining}/{currentTrade.maxRejections}";
+
+        // Update irritation meter
+        if (irritationMeter != null)
+        {
+            irritationMeter.SetIrritation(currentTrade.rejectionCount, currentTrade.maxRejections);
+        }
     }
+
 
     private void OnSliderChanged(float value)
     {
@@ -202,7 +238,9 @@ public class CaravanBarterSystem : MonoBehaviour
         hasAdjustedSlider = true;
         UpdateSliderDisplay();
         UpdateButtonText();
+        UpdateCaravanEmotion(); // Add this line
     }
+
 
     private void UpdateSliderDisplay()
     {
@@ -319,7 +357,10 @@ public class CaravanBarterSystem : MonoBehaviour
 
         if (roll <= acceptanceChance)
         {
-            // Caravan accepts lowball
+            // Caravan accepts - show happy
+            if (caravanVisuals != null)
+                caravanVisuals.SetEmotionDirect("happy");
+
             dialogueText.text = currentDialogue.acceptOffer;
 
             feedbackText.text = $"Caravan accepts your offer!\nYou offered: {currentPlayerOffer} (they wanted {currentTrade.amountRequested})\n" +
@@ -333,7 +374,10 @@ public class CaravanBarterSystem : MonoBehaviour
 
         if (currentTrade.rejectionCount >= currentTrade.maxRejections)
         {
-            // Caravan leaves frustrated
+            // Caravan leaves frustrated - show angry
+            if (caravanVisuals != null)
+                caravanVisuals.SetEmotionDirect("angry");
+
             dialogueText.text = currentDialogue.leaving;
             feedbackText.text = "Caravan is fed up and leaves!";
             UpdateRejectionCounter();
@@ -342,7 +386,10 @@ public class CaravanBarterSystem : MonoBehaviour
             return;
         }
 
-        // Caravan counters
+        // Show annoyed emotion during counter-offer
+        if (caravanVisuals != null)
+            caravanVisuals.SetEmotionDirect("annoyed");
+
         int range = currentTrade.amountRequested - currentPlayerOffer;
         float randomRatio = Random.Range(minCounterOfferRatio, maxCounterOfferRatio);
         int counterOffer = currentPlayerOffer + Mathf.RoundToInt(range * randomRatio);
@@ -352,7 +399,6 @@ public class CaravanBarterSystem : MonoBehaviour
         int previousDemand = currentTrade.amountRequested;
         currentTrade.amountRequested = counterOffer;
 
-        // Show appropriate dialogue based on rejection count
         if (currentTrade.rejectionCount >= currentTrade.maxRejections - 1)
         {
             dialogueText.text = currentDialogue.frustrated;
@@ -380,7 +426,9 @@ public class CaravanBarterSystem : MonoBehaviour
         currentPlayerOffer = currentTrade.amountRequested;
         UpdateSliderDisplay();
         UpdateButtonText();
+        UpdateCaravanEmotion(); // Reset emotion after counter
     }
+
 
 
     private void ExecuteTrade()
@@ -414,6 +462,26 @@ public class CaravanBarterSystem : MonoBehaviour
     }
 
 
+    private void UpdateCaravanEmotion()
+    {
+        if (caravanVisuals == null || currentTrade == null) return;
+
+        // Calculate normalized slider position (0.0 to 1.0)
+        float range = currentTrade.initialOffer - currentTrade.finalOffer;
+        if (range == 0)
+        {
+            caravanVisuals.SetEmotion(0.8f); // Default neutral
+            return;
+        }
+
+        // Normalize current offer: finalOffer = 0.0, initialOffer = 1.0
+        float normalizedValue = (currentPlayerOffer - currentTrade.finalOffer) / range;
+
+        // Update emotion based on normalized value
+        caravanVisuals.SetEmotion(normalizedValue);
+    }
+
+
     private void DisableButtons()
     {
         acceptOfferButton.interactable = false;
@@ -424,12 +492,36 @@ public class CaravanBarterSystem : MonoBehaviour
     private IEnumerator CloseCaravanAfterDelay(float delay)
     {
         yield return new WaitForSeconds(delay);
+
+        // Hide irritation meter
+        if (irritationMeter != null)
+        {
+            irritationMeter.HideMeter();
+        }
+
+        // Reset trade UI
+        if (tradeUIManager != null)
+        {
+            tradeUIManager.HideAllIcons();
+        }
+
+        // Slide caravan out to the right
+        if (caravanVisuals != null)
+        {
+            caravanVisuals.HideCaravan();
+            yield return new WaitForSeconds(0.6f);
+        }
+
         caravanPanel.SetActive(false);
         caravanPresent = false;
         acceptOfferButton.interactable = true;
         rejectButton.interactable = true;
         barterSlider.interactable = true;
+
+        Debug.Log("Caravan left to the right, ready for next caravan");
     }
+
+
 
     public bool IsCaravanPresent()
     {
@@ -438,10 +530,10 @@ public class CaravanBarterSystem : MonoBehaviour
 
     public void UpdateResourceUI()
     {
-        resourceAText.text = $"A: {resources[0].amount}";
-        resourceBText.text = $"B: {resources[1].amount}";
-        resourceCText.text = $"C: {resources[2].amount}";
-        resourceDText.text = $"D: {resources[3].amount}";
+        resourceAText.text = $"Pepper: {resources[0].amount}";
+        resourceBText.text = $"Cinnamon: {resources[1].amount}";
+        resourceCText.text = $"Turmeric: {resources[2].amount}";
+        resourceDText.text = $"Chilli: {resources[3].amount}";
     }
 
     public void ForceSpawnCaravan()
