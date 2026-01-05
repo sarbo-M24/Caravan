@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using TMPro;
@@ -18,7 +18,7 @@ public class CaravanBarterSystem : MonoBehaviour
 
     [Header("UI References")]
     [SerializeField] private GameObject caravanPanel;
-    [SerializeField] private TextMeshProUGUI tradeInfoText;
+    
     [SerializeField] private TextMeshProUGUI sliderValueText;
     [SerializeField] private Slider barterSlider;
     [SerializeField] private Button acceptOfferButton;
@@ -36,6 +36,21 @@ public class CaravanBarterSystem : MonoBehaviour
     [Header("Counter Offer Settings")]
     [SerializeField] private float minCounterOfferRatio = 0.3f;
     [SerializeField] private float maxCounterOfferRatio = 0.7f;
+
+    [Header("Lowball Acceptance Settings")]
+    [SerializeField] private float baseAcceptanceAtFinal = 0.8f;
+    [SerializeField] private float baseAcceptanceAtDemand = 0.0f;
+    [SerializeField] private AnimationCurve acceptanceCurve;
+
+    [Header("Day Timer")]
+    [SerializeField] private DayTimer dayTimer;
+
+    [Header("Dialogue UI")]
+    [SerializeField] private TextMeshProUGUI dialogueText;
+    [SerializeField] private TextMeshProUGUI tradeDisplayText;
+
+    private DialogueSet currentDialogue;
+
 
     private CaravanTrade currentTrade;
     private bool caravanPresent = false;
@@ -76,12 +91,24 @@ public class CaravanBarterSystem : MonoBehaviour
         while (true)
         {
             yield return new WaitForSeconds(caravanArrivalInterval);
-            SpawnCaravan();
+
+            // Only spawn if timer has time left (not during mafia collection)
+            if (dayTimer != null && dayTimer.HasTimeLeft())
+            {
+                SpawnCaravan();
+            }
         }
     }
 
     private void SpawnCaravan()
     {
+        // Double-check time left (safety check)
+        if (dayTimer != null && !dayTimer.HasTimeLeft())
+        {
+            Debug.Log("Day has ended, no more caravans!");
+            return;
+        }
+
         if (caravanPresent)
         {
             Debug.Log("Caravan already present");
@@ -122,14 +149,26 @@ public class CaravanBarterSystem : MonoBehaviour
         hasAdjustedSlider = false;
         caravanPanel.SetActive(true);
 
+        // Get random dialogue for this caravan
+        currentDialogue = CaravanDialogue.GetRandomDialogue(currentTrade.tradeType);
+
+        // Display arrival dialogue
+        string arrivalMessage = CaravanDialogue.FormatDialogue(
+            currentDialogue.arrival,
+            currentTrade.resourceOffered,
+            currentTrade.resourceRequested
+        );
+        dialogueText.text = arrivalMessage;
+
+        // Display trade info
         UpdateTradeDisplay();
         UpdateRejectionCounter();
 
         barterSlider.minValue = currentTrade.finalOffer;
         barterSlider.maxValue = currentTrade.initialOffer;
-        barterSlider.value = currentTrade.finalOffer;
+        barterSlider.value = currentTrade.amountRequested;
 
-        currentPlayerOffer = currentTrade.finalOffer;
+        currentPlayerOffer = currentTrade.amountRequested;
         UpdateSliderDisplay();
         UpdateButtonText();
 
@@ -138,16 +177,18 @@ public class CaravanBarterSystem : MonoBehaviour
         acceptOfferButton.interactable = true;
         rejectButton.interactable = true;
         barterSlider.interactable = true;
+
+        Debug.Log($"Caravan displayed - Offering: {currentTrade.amountOffered} {currentTrade.resourceOffered}, Requesting: {currentTrade.amountRequested} {currentTrade.resourceRequested}");
     }
+
+
 
     private void UpdateTradeDisplay()
     {
-        string tradeTypeText = currentTrade.tradeType == CaravanTrade.TradeType.Buy ? "wants to BUY" : "wants to SELL";
-
-        tradeInfoText.text = $"Caravan {tradeTypeText}\n\n" +
-                            $"Offers: {currentTrade.amountOffered} {currentTrade.resourceOffered}\n" +
-                            $"Wants: {currentTrade.amountRequested} {currentTrade.resourceRequested}";
+        // Simple trade summary box
+        tradeDisplayText.text = $"Get {currentTrade.amountOffered} {currentTrade.resourceOffered}  |  Pay {currentTrade.amountRequested} {currentTrade.resourceRequested}";
     }
+
 
     private void UpdateRejectionCounter()
     {
@@ -196,7 +237,6 @@ public class CaravanBarterSystem : MonoBehaviour
 
         if (hasAdjustedSlider)
         {
-            // Making a counter-offer
             if (requestedRes.amount < currentPlayerOffer)
             {
                 feedbackText.text = $"Not enough {currentTrade.resourceRequested}! Need {currentPlayerOffer}, have {requestedRes.amount}";
@@ -205,18 +245,15 @@ public class CaravanBarterSystem : MonoBehaviour
 
             if (currentPlayerOffer >= currentTrade.amountRequested)
             {
-                // Offer meets or exceeds demand, accept immediately
                 ExecuteTrade();
             }
             else
             {
-                // Low-ball offer, trigger counter-offer
                 ProcessCounterOffer();
             }
         }
         else
         {
-            // Accepting caravan's current offer
             if (requestedRes.amount < currentTrade.amountRequested)
             {
                 feedbackText.text = $"Not enough {currentTrade.resourceRequested}! Need {currentTrade.amountRequested}, have {requestedRes.amount}";
@@ -227,12 +264,77 @@ public class CaravanBarterSystem : MonoBehaviour
         }
     }
 
+    private float CalculateLowballAcceptanceChance()
+    {
+        // Calculate the range between their current demand and the best possible deal (finalOffer)
+        float range = currentTrade.amountRequested - currentTrade.finalOffer;
+        if (range == 0) return 0.95f; // If no room to negotiate, very high acceptance
+
+        // How close is your offer to their current demand?
+        // If you offer exactly their demand = 100% acceptance (but that's handled before this function)
+        // If you offer exactly finalOffer = very low acceptance (5%)
+        // Anywhere in between = scaled linearly
+
+        float offerDistance = currentTrade.amountRequested - currentPlayerOffer;
+        float normalizedPosition = offerDistance / range;
+
+        // normalizedPosition:
+        // 0.0 = you're offering exactly what they want (100% acceptance)
+        // 1.0 = you're offering the absolute minimum finalOffer (5% acceptance)
+
+        // Invert it: closer to their demand = higher chance
+        float acceptChance = Mathf.Lerp(0.95f, 0.05f, normalizedPosition);
+
+        // Optional: Apply curve for non-linear feel
+        if (acceptanceCurve != null && acceptanceCurve.keys.Length > 0)
+        {
+            acceptChance = acceptanceCurve.Evaluate(1f - normalizedPosition);
+        }
+
+        return acceptChance;
+    }
+
+
+    private void ExecuteTradeWithCustomAmount(int customAmount)
+    {
+        Resource offeredRes = resources.Find(r => r.resourceName == currentTrade.resourceOffered);
+        Resource requestedRes = resources.Find(r => r.resourceName == currentTrade.resourceRequested);
+
+        requestedRes.amount -= customAmount;
+        offeredRes.amount += currentTrade.amountOffered;
+
+        feedbackText.text += $"\n\nTrade COMPLETED!\nGave: {customAmount} {currentTrade.resourceRequested}\n" +
+                            $"Received: {currentTrade.amountOffered} {currentTrade.resourceOffered}\n" +
+                            $"Rejections: {currentTrade.rejectionCount}/{currentTrade.maxRejections}";
+
+        UpdateResourceUI();
+        DisableButtons();
+        StartCoroutine(CloseCaravanAfterDelay(3.5f));
+    }
+
     private void ProcessCounterOffer()
     {
+        float acceptanceChance = CalculateLowballAcceptanceChance();
+        float roll = Random.value;
+
+        if (roll <= acceptanceChance)
+        {
+            // Caravan accepts lowball
+            dialogueText.text = currentDialogue.acceptOffer;
+
+            feedbackText.text = $"Caravan accepts your offer!\nYou offered: {currentPlayerOffer} (they wanted {currentTrade.amountRequested})\n" +
+                               $"Lucky! ({Mathf.RoundToInt(acceptanceChance * 100)}% chance)";
+
+            ExecuteTradeWithCustomAmount(currentPlayerOffer);
+            return;
+        }
+
         currentTrade.rejectionCount++;
 
         if (currentTrade.rejectionCount >= currentTrade.maxRejections)
         {
+            // Caravan leaves frustrated
+            dialogueText.text = currentDialogue.leaving;
             feedbackText.text = "Caravan is fed up and leaves!";
             UpdateRejectionCounter();
             StartCoroutine(CloseCaravanAfterDelay(2.5f));
@@ -240,6 +342,7 @@ public class CaravanBarterSystem : MonoBehaviour
             return;
         }
 
+        // Caravan counters
         int range = currentTrade.amountRequested - currentPlayerOffer;
         float randomRatio = Random.Range(minCounterOfferRatio, maxCounterOfferRatio);
         int counterOffer = currentPlayerOffer + Mathf.RoundToInt(range * randomRatio);
@@ -249,21 +352,36 @@ public class CaravanBarterSystem : MonoBehaviour
         int previousDemand = currentTrade.amountRequested;
         currentTrade.amountRequested = counterOffer;
 
-        feedbackText.text = $"Caravan counters!\nYou offered: {currentPlayerOffer}\n" +
-                           $"They counter: {counterOffer} (was {previousDemand})";
+        // Show appropriate dialogue based on rejection count
+        if (currentTrade.rejectionCount >= currentTrade.maxRejections - 1)
+        {
+            dialogueText.text = currentDialogue.frustrated;
+        }
+        else if (currentTrade.rejectionCount == 1)
+        {
+            dialogueText.text = currentDialogue.rejectOffer;
+        }
+        else
+        {
+            dialogueText.text = currentDialogue.counterOffer;
+        }
+
+        feedbackText.text = $"You offered: {currentPlayerOffer}\n" +
+                           $"They counter: {counterOffer} (was {previousDemand})\n" +
+                           $"Acceptance chance was {Mathf.RoundToInt(acceptanceChance * 100)}%";
 
         UpdateTradeDisplay();
         UpdateRejectionCounter();
 
-        // Reset slider state after counter-offer
         hasAdjustedSlider = false;
         barterSlider.minValue = currentTrade.finalOffer;
         barterSlider.maxValue = currentTrade.amountRequested;
-        barterSlider.value = currentTrade.finalOffer;
-        currentPlayerOffer = currentTrade.finalOffer;
+        barterSlider.value = currentTrade.amountRequested;
+        currentPlayerOffer = currentTrade.amountRequested;
         UpdateSliderDisplay();
         UpdateButtonText();
     }
+
 
     private void ExecuteTrade()
     {
@@ -275,6 +393,8 @@ public class CaravanBarterSystem : MonoBehaviour
         requestedRes.amount -= finalTradeAmount;
         offeredRes.amount += currentTrade.amountOffered;
 
+        dialogueText.text = currentDialogue.acceptOffer;
+
         feedbackText.text = $"Trade COMPLETED!\nGave: {finalTradeAmount} {currentTrade.resourceRequested}\n" +
                            $"Received: {currentTrade.amountOffered} {currentTrade.resourceOffered}\n" +
                            $"Rejections: {currentTrade.rejectionCount}/{currentTrade.maxRejections}";
@@ -284,12 +404,15 @@ public class CaravanBarterSystem : MonoBehaviour
         StartCoroutine(CloseCaravanAfterDelay(3f));
     }
 
+
     private void RejectTrade()
     {
+        dialogueText.text = currentDialogue.leaving;
         feedbackText.text = "You rejected the trade. Caravan leaves.";
         DisableButtons();
         StartCoroutine(CloseCaravanAfterDelay(2f));
     }
+
 
     private void DisableButtons()
     {
@@ -308,7 +431,12 @@ public class CaravanBarterSystem : MonoBehaviour
         barterSlider.interactable = true;
     }
 
-    private void UpdateResourceUI()
+    public bool IsCaravanPresent()
+    {
+        return caravanPresent;
+    }
+
+    public void UpdateResourceUI()
     {
         resourceAText.text = $"A: {resources[0].amount}";
         resourceBText.text = $"B: {resources[1].amount}";
@@ -319,6 +447,11 @@ public class CaravanBarterSystem : MonoBehaviour
     public void ForceSpawnCaravan()
     {
         SpawnCaravan();
+    }
+
+    public List<Resource> GetResources()
+    {
+        return resources;
     }
 
     public int GetCurrentRejectionCount()
