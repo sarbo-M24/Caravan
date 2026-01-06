@@ -140,7 +140,7 @@ public class MafiaCollectionSystem : MonoBehaviour
                 acceptButtonText.text = $"Can't Pay ({demandedResource.amount}/{demandedAmount})";
                 acceptButton.interactable = false;
 
-                StartCoroutine(TriggerGameOverAfterDelay(2f));
+                StartCoroutine(TriggerGameOverAfterDelay(5f));
             }
         }
     }

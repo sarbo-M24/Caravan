@@ -248,12 +248,12 @@ public class CaravanBarterSystem : MonoBehaviour
 
         if (currentPlayerOffer >= currentTrade.amountRequested)
         {
-            sliderValueText.text += "\n(Matches their demand)";
+            //sliderValueText.text += "\n(Matches their demand)";
         }
         else
         {
             int savings = currentTrade.amountRequested - currentPlayerOffer;
-            sliderValueText.text += $"\n(Save {savings}, risk counter-offer)";
+            //sliderValueText.text += $"\n(Save {savings}, risk counter-offer)";
         }
     }
 
