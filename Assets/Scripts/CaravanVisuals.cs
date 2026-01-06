@@ -20,7 +20,11 @@ public class CaravanVisuals : MonoBehaviour
     [Header("Test Man Emotions")]
     [SerializeField] private CaravanEmotionSprites manEmotions;
 
-    [Header("Image References")]
+    [Header("Mafia Sprite (Single)")]
+    [SerializeField] private Sprite mafiaSprite; // Just one sprite
+    [SerializeField] private Image mafiaFullImage; // Full image for mafia
+
+    [Header("Split Sprite Images (For Caravan)")]
     [SerializeField] private RectTransform topHalfTransform;
     [SerializeField] private RectTransform bottomHalfTransform;
     [SerializeField] private Image topHalfImage;
@@ -42,13 +46,14 @@ public class CaravanVisuals : MonoBehaviour
     [SerializeField] private float topBobAmount = 8f;
     [SerializeField] private float bottomBobAmount = 5f;
     [SerializeField] private float bobSpeed = 1f;
-    [SerializeField] private float bobPhaseOffset = 0.5f; // Offset in radians (0.5 ≈ slight delay)
+    [SerializeField] private float bobPhaseOffset = 0.5f;
 
     private Vector2 slideBasePosition;
     private Vector2 topBasePosition;
     private Vector2 bottomBasePosition;
     private bool isIdling = false;
     private bool isAnimating = false;
+    private bool isMafiaMode = false;
 
     private void Awake()
     {
@@ -64,13 +69,23 @@ public class CaravanVisuals : MonoBehaviour
 
     public void ShowCaravan()
     {
+        isMafiaMode = false;
+
+        // Hide mafia image, show split images
+        if (mafiaFullImage != null)
+            mafiaFullImage.enabled = false;
+
+        if (topHalfImage != null)
+            topHalfImage.enabled = true;
+
+        if (bottomHalfImage != null)
+            bottomHalfImage.enabled = true;
+
         // Start with neutral emotion
         ApplyEmotionSprites(manEmotions.neutralTop, manEmotions.neutralBottom);
 
         // Reset position to start (off-screen left)
         caravanRoot.anchoredPosition = new Vector2(startXPosition, yPosition);
-        topHalfImage.enabled = true;
-        bottomHalfImage.enabled = true;
 
         // Store base positions for bobbing
         topBasePosition = topHalfTransform.anchoredPosition;
@@ -78,6 +93,32 @@ public class CaravanVisuals : MonoBehaviour
 
         // Slide in
         StartCoroutine(SlideIn());
+    }
+
+    public void ShowMafia()
+    {
+        isMafiaMode = true;
+
+        // Hide split images, show mafia full image
+        if (topHalfImage != null)
+            topHalfImage.enabled = false;
+
+        if (bottomHalfImage != null)
+            bottomHalfImage.enabled = false;
+
+        if (mafiaFullImage != null)
+        {
+            mafiaFullImage.enabled = true;
+            mafiaFullImage.sprite = mafiaSprite;
+        }
+
+        // Reset position to start (off-screen left)
+        caravanRoot.anchoredPosition = new Vector2(startXPosition, yPosition);
+
+        // Slide in
+        StartCoroutine(SlideIn());
+
+        Debug.Log("Mafia shown with single sprite");
     }
 
     public void HideCaravan()
@@ -89,65 +130,63 @@ public class CaravanVisuals : MonoBehaviour
 
     private void ApplyEmotionSprites(Sprite top, Sprite bottom)
     {
+        if (top == null || bottom == null)
+        {
+            Debug.LogError($"Trying to apply null sprites!");
+            return;
+        }
+
         if (topHalfImage != null)
             topHalfImage.sprite = top;
         if (bottomHalfImage != null)
             bottomHalfImage.sprite = bottom;
 
-        Debug.Log($"Applied emotion - Top: {top?.name}, Bottom: {bottom?.name}");
+        Debug.Log($"Applied sprites - Top: {top.name}, Bottom: {bottom.name}");
     }
 
     public void SetEmotion(float normalizedValue)
     {
-        if (manEmotions == null)
-        {
-            Debug.LogWarning("Man emotions not assigned!");
+        // Only apply emotions to caravan, not mafia
+        if (isMafiaMode || manEmotions == null)
             return;
-        }
 
         if (normalizedValue <= 0.33f)
         {
             ApplyEmotionSprites(manEmotions.angryTop, manEmotions.angryBottom);
-            Debug.Log($"Emotion: ANGRY (value: {normalizedValue:F2})");
         }
         else if (normalizedValue <= 0.66f)
         {
             ApplyEmotionSprites(manEmotions.annoyedTop, manEmotions.annoyedBottom);
-            Debug.Log($"Emotion: ANNOYED (value: {normalizedValue:F2})");
         }
         else if (normalizedValue <= 0.95f)
         {
             ApplyEmotionSprites(manEmotions.neutralTop, manEmotions.neutralBottom);
-            Debug.Log($"Emotion: NEUTRAL (value: {normalizedValue:F2})");
         }
         else
         {
             ApplyEmotionSprites(manEmotions.happyTop, manEmotions.happyBottom);
-            Debug.Log($"Emotion: HAPPY (value: {normalizedValue:F2})");
         }
     }
 
     public void SetEmotionDirect(string emotion)
     {
-        if (manEmotions == null) return;
+        // Only apply emotions to caravan, not mafia
+        if (isMafiaMode || manEmotions == null)
+            return;
 
         switch (emotion.ToLower())
         {
             case "angry":
                 ApplyEmotionSprites(manEmotions.angryTop, manEmotions.angryBottom);
-                Debug.Log("Emotion set to: ANGRY");
                 break;
             case "annoyed":
                 ApplyEmotionSprites(manEmotions.annoyedTop, manEmotions.annoyedBottom);
-                Debug.Log("Emotion set to: ANNOYED");
                 break;
             case "neutral":
                 ApplyEmotionSprites(manEmotions.neutralTop, manEmotions.neutralBottom);
-                Debug.Log("Emotion set to: NEUTRAL");
                 break;
             case "happy":
                 ApplyEmotionSprites(manEmotions.happyTop, manEmotions.happyBottom);
-                Debug.Log("Emotion set to: HAPPY");
                 break;
         }
     }
@@ -172,7 +211,7 @@ public class CaravanVisuals : MonoBehaviour
         slideBasePosition = centerPos;
         isAnimating = false;
 
-        Debug.Log("Caravan slid in to center");
+        Debug.Log("Slid in to center");
 
         if (enableIdleAnimation)
         {
@@ -187,8 +226,11 @@ public class CaravanVisuals : MonoBehaviour
         isIdling = false;
 
         // Reset to base positions before sliding out
-        topHalfTransform.anchoredPosition = topBasePosition;
-        bottomHalfTransform.anchoredPosition = bottomBasePosition;
+        if (!isMafiaMode)
+        {
+            topHalfTransform.anchoredPosition = topBasePosition;
+            bottomHalfTransform.anchoredPosition = bottomBasePosition;
+        }
 
         float elapsed = 0f;
         Vector2 startPos = caravanRoot.anchoredPosition;
@@ -205,10 +247,16 @@ public class CaravanVisuals : MonoBehaviour
 
         caravanRoot.anchoredPosition = endPos;
         isAnimating = false;
-        topHalfImage.enabled = false;
-        bottomHalfImage.enabled = false;
 
-        Debug.Log("Caravan slid out to right");
+        // Hide all images
+        if (topHalfImage != null)
+            topHalfImage.enabled = false;
+        if (bottomHalfImage != null)
+            bottomHalfImage.enabled = false;
+        if (mafiaFullImage != null)
+            mafiaFullImage.enabled = false;
+
+        Debug.Log("Slid out to right");
     }
 
     private IEnumerator IdleAnimation()
@@ -217,26 +265,41 @@ public class CaravanVisuals : MonoBehaviour
         {
             float time = Time.time * bobSpeed;
 
-            // Top half bobs with larger amplitude
-            float topBobOffset = Mathf.Sin(time) * topBobAmount;
-            topHalfTransform.anchoredPosition = topBasePosition + new Vector2(0f, topBobOffset);
+            if (isMafiaMode)
+            {
+                // Simple bob for mafia full image (bob the entire root)
+                float bobOffset = Mathf.Sin(time) * topBobAmount;
+                caravanRoot.anchoredPosition = slideBasePosition + new Vector2(0f, bobOffset);
+            }
+            else
+            {
+                // Split bob for caravan top/bottom
+                float topBobOffset = Mathf.Sin(time) * topBobAmount;
+                topHalfTransform.anchoredPosition = topBasePosition + new Vector2(0f, topBobOffset);
 
-            // Bottom half bobs with smaller amplitude and phase offset
-            float bottomBobOffset = Mathf.Sin(time + bobPhaseOffset) * bottomBobAmount;
-            bottomHalfTransform.anchoredPosition = bottomBasePosition + new Vector2(0f, bottomBobOffset);
+                float bottomBobOffset = Mathf.Sin(time + bobPhaseOffset) * bottomBobAmount;
+                bottomHalfTransform.anchoredPosition = bottomBasePosition + new Vector2(0f, bottomBobOffset);
+            }
 
             yield return null;
         }
 
-        // Reset to base positions when stopped
+        // Reset positions
         if (!isAnimating)
         {
-            topHalfTransform.anchoredPosition = topBasePosition;
-            bottomHalfTransform.anchoredPosition = bottomBasePosition;
+            if (!isMafiaMode)
+            {
+                topHalfTransform.anchoredPosition = topBasePosition;
+                bottomHalfTransform.anchoredPosition = bottomBasePosition;
+            }
+            else
+            {
+                caravanRoot.anchoredPosition = slideBasePosition;
+            }
         }
     }
 
     public bool IsAnimating() => isAnimating;
-
     public int GetCurrentCaravanType() => 0;
+    public bool IsMafiaMode() => isMafiaMode;
 }

@@ -18,6 +18,10 @@ public class DayTimer : MonoBehaviour
     [Header("Events")]
     public UnityEvent OnDayEnd;
 
+    [Header("Tutorial")]
+    [SerializeField] private TutorialManager tutorialManager;
+
+
     private float timeRemaining;
     private bool timerRunning = false;
     private bool isPaused = false;
@@ -28,6 +32,8 @@ public class DayTimer : MonoBehaviour
     {
         StartNewDay();
     }
+
+    
 
     private void Update()
     {
@@ -67,13 +73,53 @@ public class DayTimer : MonoBehaviour
 
     private void StartNewDay()
     {
-        timeRemaining = dayDuration;
+        // Check if tutorial mode and use short duration
+        if (tutorialManager != null && tutorialManager.IsTutorialMode())
+        {
+            timeRemaining = tutorialManager.GetTutorialDayDuration(); // 5 seconds
+        }
+        else if (tutorialManager != null)
+        {
+            timeRemaining = tutorialManager.GetNormalDayDuration(); // 120 seconds
+        }
+        else
+        {
+            timeRemaining = dayDuration; // Fallback
+        }
+
         timerRunning = true;
         hasTimeLeft = true;
         waitingForCaravanToLeave = false;
         UpdateDayCounter();
         UpdateTimerDisplay();
     }
+
+    
+
+    public void StartRealGameAfterTutorial()
+    {
+        Debug.Log("StartRealGameAfterTutorial called");
+
+        if (tutorialManager != null)
+        {
+            timeRemaining = tutorialManager.GetNormalDayDuration();
+            Debug.Log($"Set time remaining to: {timeRemaining}");
+        }
+        else
+        {
+            timeRemaining = dayDuration;
+            Debug.LogWarning("Tutorial manager is null, using default duration");
+        }
+
+        timerRunning = true;
+        hasTimeLeft = true;
+        waitingForCaravanToLeave = false;
+        UpdateTimerDisplay();
+
+        Debug.Log($"Timer running: {timerRunning}, Time remaining: {timeRemaining}");
+    }
+
+
 
     private void EndDay()
     {

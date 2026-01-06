@@ -10,17 +10,25 @@ public class MafiaCollectionSystem : MonoBehaviour
     [Header("References")]
     [SerializeField] private DayTimer dayTimer;
     [SerializeField] private CaravanBarterSystem caravanSystem;
+    [SerializeField] private CaravanVisuals caravanVisuals;
 
     [Header("Mafia Settings")]
     [SerializeField] private int baseDemandAmount = 10;
     [SerializeField] private float demandIncreasePerDay = 1.2f;
 
-    [Header("UI References")]
-    [SerializeField] private GameObject mafiaPanel;
-    [SerializeField] private TextMeshProUGUI mafiaDialogueText;
-    [SerializeField] private TextMeshProUGUI demandText;
-    [SerializeField] private Button payButton;
-    [SerializeField] private TextMeshProUGUI payButtonText;
+    [Header("Mafia Visuals")]
+    [SerializeField] private Sprite mafiaTopSprite;
+    [SerializeField] private Sprite mafiaBottomSprite;
+
+    [Header("Caravan UI References")]
+    [SerializeField] private GameObject caravanPanel;
+    [SerializeField] private TextMeshProUGUI dialogueText;
+    [SerializeField] private TextMeshProUGUI tradeDisplayText;
+    [SerializeField] private Button acceptButton;
+    [SerializeField] private TextMeshProUGUI acceptButtonText;
+    [SerializeField] private Button rejectButton;
+    [SerializeField] private Slider barterSlider;
+    [SerializeField] private GameObject sliderContainer; // Container with slider and related UI
 
     [Header("Game Over UI")]
     [SerializeField] private GameObject gameOverPanel;
@@ -28,9 +36,13 @@ public class MafiaCollectionSystem : MonoBehaviour
     [SerializeField] private Button restartButton;
     [SerializeField] private Button quitButton;
 
+    [Header("Tutorial")]
+    [SerializeField] private TutorialManager tutorialManager;
+
     private string demandedResourceName;
     private int demandedAmount;
     private List<Resource> resources;
+    private bool isMafiaVisit = false;
 
     private void Start()
     {
@@ -44,17 +56,14 @@ public class MafiaCollectionSystem : MonoBehaviour
             dayTimer.OnDayEnd.AddListener(OnDayEnd);
         }
 
-        if (payButton != null)
-            payButton.onClick.AddListener(AttemptPayMafia);
+        if (acceptButton != null)
+            acceptButton.onClick.AddListener(OnAcceptButtonPressed);
 
         if (restartButton != null)
             restartButton.onClick.AddListener(RestartGame);
 
         if (quitButton != null)
             quitButton.onClick.AddListener(QuitGame);
-
-        if (mafiaPanel != null)
-            mafiaPanel.SetActive(false);
 
         if (gameOverPanel != null)
             gameOverPanel.SetActive(false);
@@ -72,30 +81,77 @@ public class MafiaCollectionSystem : MonoBehaviour
 
     private void ShowMafiaDemand()
     {
+        isMafiaVisit = true;
         int currentDay = dayTimer != null ? dayTimer.GetCurrentDay() : 1;
-        demandedAmount = Mathf.RoundToInt(baseDemandAmount * Mathf.Pow(demandIncreasePerDay, currentDay - 1));
 
-        demandedResourceName = resources[Random.Range(0, resources.Count)].resourceName;
-
-        mafiaPanel.SetActive(true);
-
-        mafiaDialogueText.text = "The mafia has arrived to collect...";
-        demandText.text = $"We want {demandedAmount} of resource {demandedResourceName}.\n\nPay up, or else...";
-
-        Resource demandedResource = resources.Find(r => r.resourceName == demandedResourceName);
-
-        if (demandedResource.amount >= demandedAmount)
+        // Calculate demand
+        if (tutorialManager != null && tutorialManager.IsTutorialMode())
         {
-            payButtonText.text = "Pay";
-            payButton.interactable = true;
+            tutorialManager.OverrideMafiaDemand(out demandedResourceName, out demandedAmount);
+            Debug.Log($"Tutorial mode: Demanding impossible {demandedAmount} {demandedResourceName}");
         }
         else
         {
-            payButtonText.text = $"Can't Pay ({demandedResource.amount}/{demandedAmount})";
-            payButton.interactable = false;
-
-            StartCoroutine(TriggerGameOverAfterDelay(2f));
+            demandedAmount = Mathf.RoundToInt(baseDemandAmount * Mathf.Pow(demandIncreasePerDay, currentDay - 1));
+            demandedResourceName = resources[Random.Range(0, resources.Count)].resourceName;
         }
+
+        // Show caravan panel
+        if (caravanPanel != null)
+            caravanPanel.SetActive(true);
+
+        // Show mafia sprite (no parameters - sprites are set in CaravanVisuals inspector)
+        if (caravanVisuals != null)
+        {
+            caravanVisuals.ShowMafia();
+        }
+
+        // Set dialogue
+        if (dialogueText != null)
+        {
+            dialogueText.text = "The mafia has arrived to collect protection money...";
+        }
+
+        // Set trade display
+        if (tradeDisplayText != null)
+        {
+            tradeDisplayText.text = $"Pay {demandedAmount} {demandedResourceName}";
+        }
+
+        // Hide slider and reject button
+        if (sliderContainer != null)
+            sliderContainer.SetActive(false);
+
+        if (rejectButton != null)
+            rejectButton.gameObject.SetActive(false);
+
+        // Configure accept button
+        Resource demandedResource = resources.Find(r => r.resourceName == demandedResourceName);
+
+        if (acceptButton != null)
+        {
+            if (demandedResource.amount >= demandedAmount)
+            {
+                acceptButtonText.text = "Pay";
+                acceptButton.interactable = true;
+            }
+            else
+            {
+                acceptButtonText.text = $"Can't Pay ({demandedResource.amount}/{demandedAmount})";
+                acceptButton.interactable = false;
+
+                StartCoroutine(TriggerGameOverAfterDelay(2f));
+            }
+        }
+    }
+
+    private void OnAcceptButtonPressed()
+    {
+        if (isMafiaVisit)
+        {
+            AttemptPayMafia();
+        }
+        // If not mafia visit, CaravanBarterSystem handles it
     }
 
     private IEnumerator TriggerGameOverAfterDelay(float delay)
@@ -112,10 +168,14 @@ public class MafiaCollectionSystem : MonoBehaviour
         {
             demandedResource.amount -= demandedAmount;
 
-            mafiaDialogueText.text = "Pleasure doing business...";
-            demandText.text = $"You paid {demandedAmount} {demandedResourceName}.\n\nSee you tomorrow.";
+            if (dialogueText != null)
+                dialogueText.text = "Pleasure doing business... See you tomorrow.";
 
-            payButton.interactable = false;
+            if (tradeDisplayText != null)
+                tradeDisplayText.text = $"Paid {demandedAmount} {demandedResourceName}";
+
+            if (acceptButton != null)
+                acceptButton.interactable = false;
 
             if (caravanSystem != null)
             {
@@ -134,9 +194,24 @@ public class MafiaCollectionSystem : MonoBehaviour
     {
         yield return new WaitForSeconds(delay);
 
-        mafiaPanel.SetActive(false);
+        // Hide mafia
+        if (caravanVisuals != null)
+        {
+            caravanVisuals.HideCaravan();
+            yield return new WaitForSeconds(0.6f); // Wait for slide out
+        }
 
-        // REMOVED: caravanPanel.SetActive(true) - let caravans control their own panel
+        if (caravanPanel != null)
+            caravanPanel.SetActive(false);
+
+        // Re-enable slider and reject button for normal caravans
+        if (sliderContainer != null)
+            sliderContainer.SetActive(true);
+
+        if (rejectButton != null)
+            rejectButton.gameObject.SetActive(true);
+
+        isMafiaVisit = false;
 
         if (dayTimer != null)
         {
@@ -147,20 +222,71 @@ public class MafiaCollectionSystem : MonoBehaviour
 
     private void GameOver()
     {
-        mafiaPanel.SetActive(false);
-        gameOverPanel.SetActive(true);
+        if (caravanPanel != null)
+            caravanPanel.SetActive(false);
+
+        if (gameOverPanel != null)
+            gameOverPanel.SetActive(true);
 
         int survivedDays = dayTimer != null ? dayTimer.GetCurrentDay() : 0;
+        bool isTutorial = tutorialManager != null && tutorialManager.IsTutorialMode();
 
-        gameOverText.text = $"GAME OVER\n\nYou couldn't pay the mafia!\n\n" +
-                           $"You survived {survivedDays} day{(survivedDays != 1 ? "s" : "")}.\n\n" +
-                           $"They demanded: {demandedAmount} {demandedResourceName}";
+        if (survivedDays == 1)
+        {
+            string additionalText = isTutorial ? "\n\nStarting real game..." : "";
+            gameOverText.text = $"LESSON LEARNED\n\n" +
+                               $"The mafia demanded: {demandedAmount} {demandedResourceName}\n" +
+                               $"You only had: {resources.Find(r => r.resourceName == demandedResourceName)?.amount ?? 0}\n\n" +
+                               $"Trade wisely during the day to survive the mafia's collection!" +
+                               additionalText;
+        }
+        else
+        {
+            gameOverText.text = $"GAME OVER\n\nYou couldn't pay the mafia!\n\n" +
+                               $"You survived {survivedDays} day{(survivedDays != 1 ? "s" : "")}.\n\n" +
+                               $"They demanded: {demandedAmount} {demandedResourceName}";
+        }
 
-        Debug.Log("Player beaten by mafia - Game Over!");
+        if (restartButton != null)
+        {
+            restartButton.gameObject.SetActive(!isTutorial);
+        }
+
+        // Trigger tutorial transition
+        if (isTutorial && tutorialManager != null)
+        {
+            tutorialManager.OnMafiaFirstVisit();
+        }
+
+        Debug.Log($"Game Over shown - Tutorial mode: {isTutorial}");
+    }
+
+    public void CloseGameOverPanel()
+    {
+        Debug.Log("CloseGameOverPanel called");
+
+        if (gameOverPanel != null)
+        {
+            gameOverPanel.SetActive(false);
+        }
+
+        // Re-enable slider and reject for normal gameplay
+        if (sliderContainer != null)
+            sliderContainer.SetActive(true);
+
+        if (rejectButton != null)
+            rejectButton.gameObject.SetActive(true);
+
+        isMafiaVisit = false;
     }
 
     private void RestartGame()
     {
+        if (tutorialManager != null && !tutorialManager.IsTutorialMode())
+        {
+            return;
+        }
+
         SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
 

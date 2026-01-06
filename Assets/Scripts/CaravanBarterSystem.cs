@@ -82,7 +82,7 @@ public class CaravanBarterSystem : MonoBehaviour
         if (resources.Count == 0)
         {
             resources.Add(new Resource { resourceName = "Pepper", amount = 30 });
-            resources.Add(new Resource { resourceName = "Cinnamon", amount = 30 });
+            resources.Add(new Resource { resourceName = "Cardamom", amount = 30 });
             resources.Add(new Resource { resourceName = "Turmeric", amount = 30 });
             resources.Add(new Resource { resourceName = "Chilli", amount = 30 });
         }
@@ -271,6 +271,10 @@ public class CaravanBarterSystem : MonoBehaviour
 
     private void OnAcceptOfferButtonClicked()
     {
+        // If there's no active trade, ignore (mafia is using the button)
+        if (currentTrade == null)
+            return;
+
         Resource requestedRes = resources.Find(r => r.resourceName == currentTrade.resourceRequested);
 
         if (hasAdjustedSlider)
@@ -301,6 +305,7 @@ public class CaravanBarterSystem : MonoBehaviour
             ExecuteTrade();
         }
     }
+
 
     private float CalculateLowballAcceptanceChance()
     {
@@ -531,7 +536,7 @@ public class CaravanBarterSystem : MonoBehaviour
     public void UpdateResourceUI()
     {
         resourceAText.text = $"Pepper: {resources[0].amount}";
-        resourceBText.text = $"Cinnamon: {resources[1].amount}";
+        resourceBText.text = $"Cardamom: {resources[1].amount}";
         resourceCText.text = $"Turmeric: {resources[2].amount}";
         resourceDText.text = $"Chilli: {resources[3].amount}";
     }
