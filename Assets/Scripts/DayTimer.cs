@@ -21,7 +21,7 @@ public class DayTimer : MonoBehaviour
     [Header("Tutorial")]
     [SerializeField] private TutorialManager tutorialManager;
 
-
+    private float currentDayDuration;
     private float timeRemaining;
     private bool timerRunning = false;
     private bool isPaused = false;
@@ -32,8 +32,6 @@ public class DayTimer : MonoBehaviour
     {
         StartNewDay();
     }
-
-    
 
     private void Update()
     {
@@ -73,65 +71,68 @@ public class DayTimer : MonoBehaviour
 
     private void StartNewDay()
     {
-        // Check if tutorial mode and use short duration
         if (tutorialManager != null && tutorialManager.IsTutorialMode())
         {
-            timeRemaining = tutorialManager.GetTutorialDayDuration(); // 5 seconds
+            currentDayDuration = tutorialManager.GetTutorialDayDuration();
+            timeRemaining = currentDayDuration;
         }
         else if (tutorialManager != null)
         {
-            timeRemaining = tutorialManager.GetNormalDayDuration(); // 120 seconds
+            currentDayDuration = tutorialManager.GetNormalDayDuration();
+            timeRemaining = currentDayDuration;
         }
         else
         {
-            timeRemaining = dayDuration; // Fallback
+            currentDayDuration = dayDuration;
+            timeRemaining = currentDayDuration;
         }
 
         timerRunning = true;
         hasTimeLeft = true;
         waitingForCaravanToLeave = false;
+        isPaused = false;
         UpdateDayCounter();
         UpdateTimerDisplay();
-    }
 
-    
+        Debug.Log($"[DayTimer] StartNewDay - Duration: {currentDayDuration}, TimeRemaining: {timeRemaining}, Running: {timerRunning}");
+    }
 
     public void StartRealGameAfterTutorial()
     {
-        Debug.Log("StartRealGameAfterTutorial called");
+        Debug.Log("[DayTimer] StartRealGameAfterTutorial called");
 
         if (tutorialManager != null)
         {
-            timeRemaining = tutorialManager.GetNormalDayDuration();
-            Debug.Log($"Set time remaining to: {timeRemaining}");
+            currentDayDuration = tutorialManager.GetNormalDayDuration();
+            timeRemaining = currentDayDuration;
         }
         else
         {
-            timeRemaining = dayDuration;
-            Debug.LogWarning("Tutorial manager is null, using default duration");
+            currentDayDuration = dayDuration;
+            timeRemaining = currentDayDuration;
         }
 
         timerRunning = true;
         hasTimeLeft = true;
         waitingForCaravanToLeave = false;
+        isPaused = false;
         UpdateTimerDisplay();
 
-        Debug.Log($"Timer running: {timerRunning}, Time remaining: {timeRemaining}");
+        Debug.Log($"[DayTimer] After tutorial - Duration: {currentDayDuration}, TimeRemaining: {timeRemaining}, Running: {timerRunning}, Paused: {isPaused}");
     }
-
-
 
     private void EndDay()
     {
         timerRunning = false;
         OnDayEnd?.Invoke();
+        Debug.Log("[DayTimer] Day ended");
     }
 
     private void UpdateTimerDisplay()
     {
         if (circleTimerFill != null)
         {
-            circleTimerFill.fillAmount = 1f - (timeRemaining / dayDuration);
+            circleTimerFill.fillAmount = timeRemaining / currentDayDuration;
         }
     }
 
@@ -152,11 +153,13 @@ public class DayTimer : MonoBehaviour
     public void PauseTimer()
     {
         isPaused = true;
+        Debug.Log("[DayTimer] Timer paused");
     }
 
     public void ResumeTimer()
     {
         isPaused = false;
+        Debug.Log("[DayTimer] Timer resumed");
     }
 
     public int GetCurrentDay()

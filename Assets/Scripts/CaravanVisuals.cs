@@ -3,32 +3,37 @@ using UnityEngine;
 using UnityEngine.UI;
 
 [System.Serializable]
-public class CaravanEmotionSprites
+public class MoodFrames
 {
-    public Sprite angryTop;
-    public Sprite angryBottom;
-    public Sprite annoyedTop;
-    public Sprite annoyedBottom;
-    public Sprite neutralTop;
-    public Sprite neutralBottom;
-    public Sprite happyTop;
-    public Sprite happyBottom;
+    public Sprite[] character1Frames;
+    public Sprite[] character2Frames;
+}
+
+[System.Serializable]
+public class CaravanMoods
+{
+    public MoodFrames angryMood;
+    public MoodFrames annoyedMood;
+    public MoodFrames neutralMood;
+    public MoodFrames happyMood;
 }
 
 public class CaravanVisuals : MonoBehaviour
 {
-    [Header("Test Man Emotions")]
-    [SerializeField] private CaravanEmotionSprites manEmotions;
+    [Header("Caravan Moods")]
+    [SerializeField] private CaravanMoods caravanMoods;
+    [SerializeField] private int currentCharacterIndex = 0;
 
-    [Header("Mafia Sprite (Single)")]
-    [SerializeField] private Sprite mafiaSprite; // Just one sprite
-    [SerializeField] private Image mafiaFullImage; // Full image for mafia
+    [Header("Mafia Sprite (Animated)")]
+    [SerializeField] private Sprite[] mafiaFrames;
 
-    [Header("Split Sprite Images (For Caravan)")]
-    [SerializeField] private RectTransform topHalfTransform;
-    [SerializeField] private RectTransform bottomHalfTransform;
-    [SerializeField] private Image topHalfImage;
-    [SerializeField] private Image bottomHalfImage;
+    [Header("Display Images")]
+    [SerializeField] private Image caravanImage;
+    [SerializeField] private Image mafiaFullImage;
+
+    [Header("Frame Animation Settings")]
+    [SerializeField] private float frameRate = 10f;
+    [SerializeField] private bool loopAnimation = true;
 
     [Header("Slide Animation")]
     [SerializeField] private RectTransform caravanRoot;
@@ -41,57 +46,39 @@ public class CaravanVisuals : MonoBehaviour
     [SerializeField] private AnimationCurve slideInCurve = AnimationCurve.EaseInOut(0, 0, 1, 1);
     [SerializeField] private AnimationCurve slideOutCurve = AnimationCurve.EaseInOut(0, 0, 1, 1);
 
-    [Header("Idle Bob Animation")]
-    [SerializeField] private bool enableIdleAnimation = true;
-    [SerializeField] private float topBobAmount = 8f;
-    [SerializeField] private float bottomBobAmount = 5f;
-    [SerializeField] private float bobSpeed = 1f;
-    [SerializeField] private float bobPhaseOffset = 0.5f;
-
     private Vector2 slideBasePosition;
-    private Vector2 topBasePosition;
-    private Vector2 bottomBasePosition;
-    private bool isIdling = false;
     private bool isAnimating = false;
     private bool isMafiaMode = false;
+    private bool isPlayingFrameAnimation = false;
+
+    private Coroutine frameAnimationCoroutine;
 
     private void Awake()
     {
         if (caravanRoot == null)
             caravanRoot = GetComponent<RectTransform>();
-
-        if (topHalfTransform == null && topHalfImage != null)
-            topHalfTransform = topHalfImage.GetComponent<RectTransform>();
-
-        if (bottomHalfTransform == null && bottomHalfImage != null)
-            bottomHalfTransform = bottomHalfImage.GetComponent<RectTransform>();
     }
 
     public void ShowCaravan()
     {
         isMafiaMode = false;
 
-        // Hide mafia image, show split images
+        StopFrameAnimations();
+
         if (mafiaFullImage != null)
             mafiaFullImage.enabled = false;
 
-        if (topHalfImage != null)
-            topHalfImage.enabled = true;
+        if (caravanImage != null)
+            caravanImage.enabled = true;
 
-        if (bottomHalfImage != null)
-            bottomHalfImage.enabled = true;
+        // FIX: Randomize character on each show
+        currentCharacterIndex = Random.Range(0, 2);
+        Debug.Log($"[ShowCaravan] Selected Character {currentCharacterIndex}");
 
-        // Start with neutral emotion
-        ApplyEmotionSprites(manEmotions.neutralTop, manEmotions.neutralBottom);
+        SetEmotionDirect("neutral");
 
-        // Reset position to start (off-screen left)
         caravanRoot.anchoredPosition = new Vector2(startXPosition, yPosition);
 
-        // Store base positions for bobbing
-        topBasePosition = topHalfTransform.anchoredPosition;
-        bottomBasePosition = bottomHalfTransform.anchoredPosition;
-
-        // Slide in
         StartCoroutine(SlideIn());
     }
 
@@ -99,95 +86,200 @@ public class CaravanVisuals : MonoBehaviour
     {
         isMafiaMode = true;
 
-        // Hide split images, show mafia full image
-        if (topHalfImage != null)
-            topHalfImage.enabled = false;
+        StopFrameAnimations();
 
-        if (bottomHalfImage != null)
-            bottomHalfImage.enabled = false;
+        if (caravanImage != null)
+            caravanImage.enabled = false;
 
         if (mafiaFullImage != null)
         {
             mafiaFullImage.enabled = true;
-            mafiaFullImage.sprite = mafiaSprite;
+            if (mafiaFrames != null && mafiaFrames.Length > 0)
+            {
+                mafiaFullImage.sprite = mafiaFrames[0];
+                frameAnimationCoroutine = StartCoroutine(AnimateMafiaFrames());
+            }
         }
 
-        // Reset position to start (off-screen left)
         caravanRoot.anchoredPosition = new Vector2(startXPosition, yPosition);
 
-        // Slide in
         StartCoroutine(SlideIn());
 
-        Debug.Log("Mafia shown with single sprite");
+        Debug.Log("Mafia shown with animated frames");
     }
 
     public void HideCaravan()
     {
         StopAllCoroutines();
-        isIdling = false;
+        StopFrameAnimations();
         StartCoroutine(SlideOut());
     }
 
-    private void ApplyEmotionSprites(Sprite top, Sprite bottom)
+    private void StopFrameAnimations()
     {
-        if (top == null || bottom == null)
+        isPlayingFrameAnimation = false;
+
+        if (frameAnimationCoroutine != null)
         {
-            Debug.LogError($"Trying to apply null sprites!");
+            StopCoroutine(frameAnimationCoroutine);
+            frameAnimationCoroutine = null;
+        }
+    }
+
+    private void ApplyMoodFrames(Sprite[] frames)
+    {
+        if (frames == null || frames.Length == 0)
+        {
+            Debug.LogError($"[CaravanVisuals] NULL/EMPTY FRAMES for Character {currentCharacterIndex}! Check Inspector assignments.");
             return;
         }
 
-        if (topHalfImage != null)
-            topHalfImage.sprite = top;
-        if (bottomHalfImage != null)
-            bottomHalfImage.sprite = bottom;
+        StopFrameAnimations();
 
-        Debug.Log($"Applied sprites - Top: {top.name}, Bottom: {bottom.name}");
+        if (caravanImage != null)
+        {
+            caravanImage.sprite = frames[0];
+            caravanImage.enabled = true;
+        }
+
+        frameAnimationCoroutine = StartCoroutine(AnimateCaravanFrames(frames));
+
+        Debug.Log($"[CaravanVisuals] Applied {frames.Length} frames for Character {currentCharacterIndex}");
+    }
+
+    private IEnumerator AnimateCaravanFrames(Sprite[] frames)
+    {
+        if (frames == null || frames.Length == 0 || caravanImage == null)
+            yield break;
+
+        isPlayingFrameAnimation = true;
+        float frameDuration = 1f / frameRate;
+        int currentFrameIndex = 0;
+
+        while (isPlayingFrameAnimation)
+        {
+            yield return new WaitForSeconds(frameDuration);
+
+            if (!isPlayingFrameAnimation || caravanImage == null)
+                yield break;
+
+            currentFrameIndex = (currentFrameIndex + 1) % frames.Length;
+            caravanImage.sprite = frames[currentFrameIndex];
+
+            if (!loopAnimation && currentFrameIndex == 0)
+            {
+                isPlayingFrameAnimation = false;
+                yield break;
+            }
+        }
+    }
+
+    private IEnumerator AnimateMafiaFrames()
+    {
+        if (mafiaFrames == null || mafiaFrames.Length == 0 || mafiaFullImage == null)
+            yield break;
+
+        isPlayingFrameAnimation = true;
+        float frameDuration = 1f / frameRate;
+        int currentFrameIndex = 0;
+
+        while (isPlayingFrameAnimation)
+        {
+            yield return new WaitForSeconds(frameDuration);
+
+            if (!isPlayingFrameAnimation || mafiaFullImage == null)
+                yield break;
+
+            currentFrameIndex = (currentFrameIndex + 1) % mafiaFrames.Length;
+            mafiaFullImage.sprite = mafiaFrames[currentFrameIndex];
+
+            if (!loopAnimation && currentFrameIndex == 0)
+            {
+                isPlayingFrameAnimation = false;
+                yield break;
+            }
+        }
     }
 
     public void SetEmotion(float normalizedValue)
     {
-        // Only apply emotions to caravan, not mafia
-        if (isMafiaMode || manEmotions == null)
+        if (isMafiaMode || caravanMoods == null)
             return;
 
         if (normalizedValue <= 0.33f)
         {
-            ApplyEmotionSprites(manEmotions.angryTop, manEmotions.angryBottom);
+            SetEmotionDirect("angry");
         }
         else if (normalizedValue <= 0.66f)
         {
-            ApplyEmotionSprites(manEmotions.annoyedTop, manEmotions.annoyedBottom);
+            SetEmotionDirect("annoyed");
         }
         else if (normalizedValue <= 0.95f)
         {
-            ApplyEmotionSprites(manEmotions.neutralTop, manEmotions.neutralBottom);
+            SetEmotionDirect("neutral");
         }
         else
         {
-            ApplyEmotionSprites(manEmotions.happyTop, manEmotions.happyBottom);
+            SetEmotionDirect("happy");
         }
     }
 
     public void SetEmotionDirect(string emotion)
     {
-        // Only apply emotions to caravan, not mafia
-        if (isMafiaMode || manEmotions == null)
+        if (isMafiaMode || caravanMoods == null)
             return;
+
+        Sprite[] framesToApply = null;
 
         switch (emotion.ToLower())
         {
             case "angry":
-                ApplyEmotionSprites(manEmotions.angryTop, manEmotions.angryBottom);
+                framesToApply = (currentCharacterIndex == 0)
+                    ? caravanMoods.angryMood.character1Frames
+                    : caravanMoods.angryMood.character2Frames;
+                Debug.Log($"[CaravanVisuals] Setting ANGRY for Character {currentCharacterIndex}");
                 break;
             case "annoyed":
-                ApplyEmotionSprites(manEmotions.annoyedTop, manEmotions.annoyedBottom);
+                framesToApply = (currentCharacterIndex == 0)
+                    ? caravanMoods.annoyedMood.character1Frames
+                    : caravanMoods.annoyedMood.character2Frames;
+                Debug.Log($"[CaravanVisuals] Setting ANNOYED for Character {currentCharacterIndex}");
                 break;
             case "neutral":
-                ApplyEmotionSprites(manEmotions.neutralTop, manEmotions.neutralBottom);
+                framesToApply = (currentCharacterIndex == 0)
+                    ? caravanMoods.neutralMood.character1Frames
+                    : caravanMoods.neutralMood.character2Frames;
+                Debug.Log($"[CaravanVisuals] Setting NEUTRAL for Character {currentCharacterIndex}");
                 break;
             case "happy":
-                ApplyEmotionSprites(manEmotions.happyTop, manEmotions.happyBottom);
+                framesToApply = (currentCharacterIndex == 0)
+                    ? caravanMoods.happyMood.character1Frames
+                    : caravanMoods.happyMood.character2Frames;
+                Debug.Log($"[CaravanVisuals] Setting HAPPY for Character {currentCharacterIndex}");
                 break;
+        }
+
+        if (framesToApply != null && framesToApply.Length > 0)
+        {
+            ApplyMoodFrames(framesToApply);
+        }
+        else
+        {
+            Debug.LogError($"[CaravanVisuals] MISSING FRAMES: {emotion} for Character {currentCharacterIndex}. Check Inspector!");
+        }
+    }
+
+    public void SetCharacter(int characterIndex)
+    {
+        if (characterIndex == 0 || characterIndex == 1)
+        {
+            Debug.Log($"[CaravanVisuals] Switching from Character {currentCharacterIndex} to Character {characterIndex}");
+            currentCharacterIndex = characterIndex;
+            SetEmotionDirect("neutral");
+        }
+        else
+        {
+            Debug.LogError($"Character index {characterIndex} out of range! Only 0 or 1 allowed.");
         }
     }
 
@@ -212,25 +304,11 @@ public class CaravanVisuals : MonoBehaviour
         isAnimating = false;
 
         Debug.Log("Slid in to center");
-
-        if (enableIdleAnimation)
-        {
-            isIdling = true;
-            StartCoroutine(IdleAnimation());
-        }
     }
 
     private IEnumerator SlideOut()
     {
         isAnimating = true;
-        isIdling = false;
-
-        // Reset to base positions before sliding out
-        if (!isMafiaMode)
-        {
-            topHalfTransform.anchoredPosition = topBasePosition;
-            bottomHalfTransform.anchoredPosition = bottomBasePosition;
-        }
 
         float elapsed = 0f;
         Vector2 startPos = caravanRoot.anchoredPosition;
@@ -248,58 +326,15 @@ public class CaravanVisuals : MonoBehaviour
         caravanRoot.anchoredPosition = endPos;
         isAnimating = false;
 
-        // Hide all images
-        if (topHalfImage != null)
-            topHalfImage.enabled = false;
-        if (bottomHalfImage != null)
-            bottomHalfImage.enabled = false;
+        if (caravanImage != null)
+            caravanImage.enabled = false;
         if (mafiaFullImage != null)
             mafiaFullImage.enabled = false;
 
         Debug.Log("Slid out to right");
     }
 
-    private IEnumerator IdleAnimation()
-    {
-        while (isIdling && !isAnimating)
-        {
-            float time = Time.time * bobSpeed;
-
-            if (isMafiaMode)
-            {
-                // Simple bob for mafia full image (bob the entire root)
-                float bobOffset = Mathf.Sin(time) * topBobAmount;
-                caravanRoot.anchoredPosition = slideBasePosition + new Vector2(0f, bobOffset);
-            }
-            else
-            {
-                // Split bob for caravan top/bottom
-                float topBobOffset = Mathf.Sin(time) * topBobAmount;
-                topHalfTransform.anchoredPosition = topBasePosition + new Vector2(0f, topBobOffset);
-
-                float bottomBobOffset = Mathf.Sin(time + bobPhaseOffset) * bottomBobAmount;
-                bottomHalfTransform.anchoredPosition = bottomBasePosition + new Vector2(0f, bottomBobOffset);
-            }
-
-            yield return null;
-        }
-
-        // Reset positions
-        if (!isAnimating)
-        {
-            if (!isMafiaMode)
-            {
-                topHalfTransform.anchoredPosition = topBasePosition;
-                bottomHalfTransform.anchoredPosition = bottomBasePosition;
-            }
-            else
-            {
-                caravanRoot.anchoredPosition = slideBasePosition;
-            }
-        }
-    }
-
     public bool IsAnimating() => isAnimating;
-    public int GetCurrentCaravanType() => 0;
+    public int GetCurrentCaravanType() => currentCharacterIndex;
     public bool IsMafiaMode() => isMafiaMode;
 }

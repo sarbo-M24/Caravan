@@ -1,16 +1,16 @@
 fileFormatVersion: 2
-guid: 18e80d1173bc7234dbf5980ccd67ce03
+guid: 612c0d097d9631d468208712fd5f3d84
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: 3838753206349949486
-    second: Caravan_Eustice_0
+      213: 3515649194433467742
+    second: CaravanMan3emo1Final-sheet_0
   - first:
-      213: -8897493947779226250
-    second: Caravan_Eustice_1
+      213: 8245646879757520922
+    second: CaravanMan3emo1Final-sheet_1
   - first:
-      213: -2747850831741977133
-    second: Caravan_Eustice_2
+      213: 3762987094194828569
+    second: CaravanMan3emo1Final-sheet_2
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -119,7 +119,7 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: Caravan_Eustice_0
+      name: CaravanMan3emo1Final-sheet_0
       rect:
         serializedVersion: 2
         x: 0
@@ -134,14 +134,14 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: e2a61ecd3bdf54530800000000000000
-      internalID: 3838753206349949486
+      spriteID: e55581dc0581ac030800000000000000
+      internalID: 3515649194433467742
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: Caravan_Eustice_1
+      name: CaravanMan3emo1Final-sheet_1
       rect:
         serializedVersion: 2
         x: 128
@@ -156,14 +156,14 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: 6756e6b3560c58480800000000000000
-      internalID: -8897493947779226250
+      spriteID: a10514b562c6e6270800000000000000
+      internalID: 8245646879757520922
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: Caravan_Eustice_2
+      name: CaravanMan3emo1Final-sheet_2
       rect:
         serializedVersion: 2
         x: 256
@@ -178,8 +178,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: 3ddf14e2a3cadd9d0800000000000000
-      internalID: -2747850831741977133
+      spriteID: 915bcd333d0d83430800000000000000
+      internalID: 3762987094194828569
       vertices: []
       indices: 
       edges: []
@@ -188,7 +188,7 @@ TextureImporter:
     customData: 
     physicsShape: []
     bones: []
-    spriteID: 37c18e863825f374390817512841f800
+    spriteID: d2b56b2b26537114bb72d5d8a9e1dbbf
     internalID: 0
     vertices: []
     indices: 
@@ -198,9 +198,9 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      Caravan_Eustice_0: 3838753206349949486
-      Caravan_Eustice_1: -8897493947779226250
-      Caravan_Eustice_2: -2747850831741977133
+      CaravanMan3emo1Final-sheet_0: 3515649194433467742
+      CaravanMan3emo1Final-sheet_1: 8245646879757520922
+      CaravanMan3emo1Final-sheet_2: 3762987094194828569
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 
